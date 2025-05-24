@@ -1,0 +1,13 @@
+name: "observability"
+
+services:
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.1
+    container_name: aspire-dashboard
+    environment:
+      # https://hub.docker.com/r/microsoft/dotnet-aspire-dashboard/
+      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
+    ports:
+      - 18888:18888
+      - 4317:18889

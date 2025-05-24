@@ -1,0 +1,84 @@
+name: "observability"
+
+services:
+
+  tempo:
+    container_name: tempo
+    image: grafana/tempo:2.3.1
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./config/grafana-stack/tempo/config.yml:/etc/tempo.yaml
+      - ./docker_volumes/grafana-stack/tempo:/var/tempo
+    ports:
+      - "3200"   # tempo
+      - "4317"  # otlp grpc
+      - "4318"  # otlp http
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus
+    environment:
+      - config.file=/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.listen-address=:8080'
+    ports:
+      - 9090:9090
+      - 8080:8080
+    volumes:
+      - ./config/grafana-stack/prometheus:/etc/prometheus
+      - ./docker_volumes/grafana-stack/prometheus:/prometheus
+
+  loki:
+    container_name: loki
+    image: grafana/loki:2.9.2
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - 3100:3100
+    volumes:
+      - ./config/grafana-stack/loki:/etc/loki
+
+  otel-collector:
+    container_name: otel_collector
+    image: otel/opentelemetry-collector-contrib:latest
+    command: 
+      - '--config=/etc/otel-collector.yaml'
+    volumes:
+      - ./config/grafana-stack/otel-collector/config.yml:/etc/otel-collector.yaml
+      - /var/run/docker.sock.raw:/var/run/docker.sock
+    ports:
+      # - 1888:1888 # pprof extension
+      # - 13133:13133 # health_check extension
+      # - 55679:55679 # zpages extension
+      # - 8888:8888 # Prometheus metrics exposed by the collector
+      # - 8889:8889 # Prometheus exporter metrics
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    user: ":"    # required due to mounted volumes - https://community.grafana.com/t/new-docker-install-with-persistent-storage-permission-problem/10896/17
+    environment:
+      # - GF_SECURITY_ADMIN_USER=admin
+      # - GF_SECURITY_ADMIN_PASSWORD=grafana
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    ports:
+      - 3000:3000
+    volumes:
+      - ./config/grafana-stack/grafana/datasource.yml:/etc/grafana/provisioning/datasources/ds.yaml # name needs to be ds.yaml or it won't be properly provisionned with error 'Failed to provision data sources'
+      - ./config/grafana-stack/grafana/dashboard.yaml:/etc/grafana/provisioning/dashboards/main.yaml
+      - ./config/grafana-stack/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./docker_volumes/grafana-stack/grafana:/var/lib/grafana
+    depends_on:
+      - loki
+      - prometheus
+      - tempo
+      - otel-collector

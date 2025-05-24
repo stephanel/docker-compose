@@ -1,0 +1,176 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - http://localhost:4200
+      grpc:
+        endpoint: 0.0.0.0:4317
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      disk: {}
+      load: {}
+      filesystem: {}
+      memory: {}
+      network: {}
+      paging: {}
+      process:
+        mute_process_name_error: true
+        mute_process_exe_error: true
+        mute_process_io_error: true
+      processes: {}
+  rabbitmq:
+    endpoint: http://rabbitmq:15672
+    username: guest
+    password: guest
+    collection_interval: 30s
+  postgresql:
+    endpoint: postgres:5432
+    transport: tcp
+    username: admin
+    password: postgres
+    databases:
+      - demo_db
+    collection_interval: 10s
+    tls:
+      insecure: true
+      insecure_skip_verify:
+        true
+        # If your postgresql is connected by ssl you can use following settings
+        # insecure: false
+    # insecure_skip_verify: false
+    # ca_file: /home/otel/authorities.crt
+    # cert_file: /home/otel/mypostgrescert.crt
+    # key_file: /home/otel/mypostgreskey.key
+  # config to pull metrics from sqlserver. check docker compose file: olt-collector needs network 'sqlserver'
+  sqlserver:
+    collection_interval: 10s
+    username: sa
+    password: Root!7646
+    server: worksense_sql-sql2022-1
+    port: 1433
+    resource_attributes:
+      sqlserver.computer.name:
+        enabled: true
+      sqlserver.instance.name:
+        enabled: true
+    metrics:
+      sqlserver.lock.wait_time.avg:
+        enabled: true
+      # optional
+      sqlserver.database.count:
+        enabled: true
+      sqlserver.database.latency:
+        enabled: true
+
+  docker_stats:
+    #endpoint: http://example.com/
+    collection_interval: 2s
+    timeout: 20s
+    api_version: "1.25"
+    # container_labels_to_metric_labels:
+    #   my.container.label: my-metric-label
+    #   my.other.container.label: my-other-metric-label
+    # env_vars_to_metric_labels:
+    #   MY_ENVIRONMENT_VARIABLE: my-metric-label
+    #   MY_OTHER_ENVIRONMENT_VARIABLE: my-other-metric-label
+    # excluded_images:
+    #   - undesired-container
+    #   - /.*undesired.*/
+    #   - another-*-container
+    # metrics: 
+    #   container.cpu.usage.percpu:
+    #     enabled: true
+    #   container.network.io.usage.tx_dropped:
+    #     enabled: false
+
+processors:
+  batch:
+    timeout: 1s
+
+  resource: 
+    attributes:  
+      # env
+      - action: insert 
+        key: env 
+        from_attribute: env 
+      - action: insert 
+        key: loki.resource.labels 
+        value: env 
+      # app
+      - action: insert 
+        key: app 
+        from_attribute: app 
+      - action: insert 
+        key: loki.resource.labels 
+        value: app 
+      # service_name
+      - action: insert 
+        key: service_name 
+        from_attribute: service.name 
+      - action: insert 
+        key: loki.resource.labels 
+        value: service_name
+
+  # configure attributes/resources using processors
+  # https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/14190#issuecomment-1505414541
+
+exporters:
+  debug:
+    verbosity: detailed
+
+  prometheus:
+    endpoint: "0.0.0.0:8889"    
+    const_labels:
+      product_id: OtelDemo
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  otlp:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    # format: json
+    # labels:
+    #   resource:
+    #     service.name: "service_name"
+    #     service.instance.id: "service_instance_id"
+        
+
+extensions:
+  health_check:
+  pprof:
+    endpoint: :1888
+  zpages:
+    endpoint: :55679
+
+service:
+  extensions: [pprof, zpages, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      # processors: [batch, resource]
+      processors: [batch]
+      exporters: [debug, otlp]
+
+    metrics:
+      receivers: [otlp, postgresql, rabbitmq] # sqlserver] #  
+      processors: [batch]
+      exporters: [debug, prometheus]
+
+    # metrics/hostmetrics:
+    #   receivers: [hostmetrics]
+    #   processors: [batch]
+    #   exporters: [otlp]
+
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, loki]
