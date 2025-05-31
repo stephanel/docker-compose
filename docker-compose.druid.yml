@@ -1,0 +1,117 @@
+name: "druid-stack"
+
+volumes:
+  metadata_data: {}
+  middle_var: {}
+  historical_var: {}
+  broker_var: {}
+  coordinator_var: {}
+  router_var: {}
+  druid_shared: {}
+
+
+services:
+
+  druid-postgres:
+    container_name: druid-postgres
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    volumes:
+      - metadata_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=FoolishPassword
+      - POSTGRES_USER=druid
+      - POSTGRES_DB=druid
+
+  # Need 3.5 or later for container nodes
+  druid-zookeeper:
+    container_name: druid-zookeeper
+    image: zookeeper:3.5.10
+    ports:
+      - "2181:2181"
+    environment:
+      - ZOO_MY_ID=1
+
+  druid-coordinator:
+    image: apache/druid:33.0.0
+    container_name: druid-coordinator
+    volumes:
+      - druid_shared:/opt/shared
+      - coordinator_var:/opt/druid/var
+    depends_on:
+      - druid-zookeeper
+      - druid-postgres
+    ports:
+      - "8081:8081"
+    command:
+      - coordinator
+    env_file:
+      - ./config/druid/environment
+
+  druid-broker:
+    image: apache/druid:33.0.0
+    container_name: druid-broker
+    volumes:
+      - broker_var:/opt/druid/var
+    depends_on:
+      - druid-zookeeper
+      - druid-postgres
+      - druid-coordinator
+    ports:
+      - "8082:8082"
+    command:
+      - broker
+    env_file:
+      - ./config/druid/environment
+
+  druid-historical:
+    image: apache/druid:33.0.0
+    container_name: druid-historical
+    volumes:
+      - druid_shared:/opt/shared
+      - historical_var:/opt/druid/var
+    depends_on: 
+      - druid-zookeeper
+      - druid-postgres
+      - druid-coordinator
+    ports:
+      - "8083:8083"
+    command:
+      - historical
+    env_file:
+      - ./config/druid/environment
+
+  druid-middlemanager:
+    image: apache/druid:33.0.0
+    container_name: druid-middlemanager
+    volumes:
+      - druid_shared:/opt/shared
+      - middle_var:/opt/druid/var
+    depends_on: 
+      - druid-zookeeper
+      - druid-postgres
+      - druid-coordinator
+    ports:
+      - "8091:8091"
+      - "8100-8105:8100-8105"
+    command:
+      - middleManager
+    env_file:
+      - ./config/druid/environment
+
+  druid-router:
+    image: apache/druid:33.0.0
+    container_name: druid-router
+    volumes:
+      - router_var:/opt/druid/var
+    depends_on:
+      - druid-zookeeper
+      - druid-postgres
+      - druid-coordinator
+    ports:
+      - "8888:8888"
+    command:
+      - router
+    env_file:
+      - ./config/druid/environment
