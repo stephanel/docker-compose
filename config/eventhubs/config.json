@@ -9,9 +9,12 @@
                 "Name": "eh1",
                 "PartitionCount": "2",
                 "ConsumerGroups": [
-                {
-                    "Name": "cg1"
-                }
+                    {
+                        "Name": "cg1"
+                    },
+                    {
+                        "Name": "cg2"
+                    }
                 ]
             }
             ]
